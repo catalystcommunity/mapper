@@ -46,6 +46,7 @@ jobs:
       - name: Compile and Test
         run: |
           git config --global url."https://${{ secrets.AUTOMATION_PAT }}@github.com".insteadOf "https://github.com"
+          go mod download
           go build ./...
           cd test
           go test
