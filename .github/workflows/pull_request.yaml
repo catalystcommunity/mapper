@@ -25,28 +25,12 @@ jobs:
     name: Test
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v3
-      - name: Setup cache
-        uses: actions/cache@v3
+      - uses: actions/checkout@v3
+      - name: Set up Go
+        uses: actions/setup-go@v3
         with:
-          # In order:
-          # * go Module download cache
-          # * go Build cache (Linux)
-          path: |
-            ~/go/pkg/mod
-            ~/.cache/go-build
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-
-      - name: Setup go
-        uses: actions/setup-go@v4
-        with:
-          go-version: 1.20
-      - name: Compile and Test
-        run: |
-          git config --global url."https://${{ secrets.AUTOMATION_PAT }}@github.com".insteadOf "https://github.com"
-          go mod download
-          go build ./...
-          cd test
-          go test
+          go-version: 1.20.x
+      - name: Build
+        run: go build -v ./...
+      - name: Test
+        run: go test -v ./...
