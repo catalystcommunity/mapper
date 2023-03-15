@@ -1,0 +1,16 @@
+name: Release
+on:
+  pull_request:
+    types:
+      - closed
+    branches:
+      - main
+jobs:
+  release:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    name: Release
+    steps:
+      - uses: catalystsquad/action-semantic-release-general@v1
+        with:
+          token: ${{ secrets.AUTOMATION_PAT }}

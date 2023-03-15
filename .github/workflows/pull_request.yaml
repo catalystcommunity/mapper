@@ -1,0 +1,36 @@
+name: Test
+on:
+  pull_request:
+    branches:
+      - main
+jobs:
+  validate-pr-title:
+    name: Validate Conventional Commits PR
+    if: github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    steps:
+      - uses: crazy-max/ghaction-dump-context@v1
+      - uses: amannn/action-semantic-pull-request@v3.4.6
+        with:
+          types: |
+            fix
+            feat
+            norelease
+            chore
+          validateSingleCommit: true
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+  test:
+    if: github.event.pull_request.draft == false
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Go
+        uses: actions/setup-go@v3
+        with:
+          go-version: 1.20.x
+      - name: Build
+        run: go build -v ./...
+      - name: Test
+        run: go test -v ./...
