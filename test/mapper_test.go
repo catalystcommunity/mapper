@@ -351,7 +351,7 @@ func (s *MapperSuite) TestTypeCoercion() {
 	require.Equal(s.T(), string(structBytes), aCoerecedStruct.SomeNestedStruct)
 }
 
-func (s *MapperSuite) TestOmitEmpty() {
+func (s *MapperSuite) TestOmitEmptyStruct() {
 	type dest struct {
 		Id nulls.UUID `mapper:"omitempty"`
 	}
@@ -368,6 +368,21 @@ func (s *MapperSuite) TestOmitEmpty() {
 	require.Equal(s.T(), fmt.Sprintf(`{"AString":"%s"}`, theString), string(bytes))
 	theDest := &dest{}
 	err = pkg.Unmarshal(bytes, theDest)
+	require.NoError(s.T(), err)
+}
+
+func (s *MapperSuite) TestOmitEmptySlice() {
+	type source struct {
+		Id *string `json:"id,omitempty"`
+	}
+	type dest struct {
+		Id nulls.UUID `json:"id,omitempty" mapper:"omitempty"`
+	}
+	theSource := source{
+		Id: nil,
+	}
+	theDest := dest{}
+	err := pkg.Convert(theSource, &theDest)
 	require.NoError(s.T(), err)
 }
 

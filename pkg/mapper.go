@@ -84,6 +84,10 @@ func marshalStruct(v any) ([]byte, error) {
 				return nil, err
 			}
 			if tagData.OmitEmpty && isEmptyValue(value) {
+				jsonBytes, err = sjson.DeleteBytes(jsonBytes, tagData.JsonFieldName)
+				if err != nil {
+					return nil, err
+				}
 				continue
 			}
 			changes[tagData.MapperFieldPath] = value
@@ -184,9 +188,11 @@ func getTagDatas(v any) ([]tagInfo, error) {
 	tagDatas := []tagInfo{}
 	for i := 0; i < destType.NumField(); i++ {
 		field := destType.Field(i)
-		tagData := getTagInfo(field)
-		if tagData.MapperFieldPath != "" || tagData.OmitEmpty == true {
-			tagDatas = append(tagDatas, tagData)
+		if field.Tag.Get(mapperTagName) != "" {
+			tagData := getTagInfo(field)
+			if tagData.MapperFieldPath != "" || tagData.OmitEmpty == true {
+				tagDatas = append(tagDatas, tagData)
+			}
 		}
 	}
 	return tagDatas, nil
