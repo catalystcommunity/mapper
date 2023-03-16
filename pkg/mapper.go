@@ -19,6 +19,14 @@ type tagInfo struct {
 	JsonFieldName   string
 }
 
+func Convert(source, dest interface{}) error {
+	sourceBytes, err := Marshal(source)
+	if err != nil {
+		return err
+	}
+	return Unmarshal(sourceBytes, dest)
+}
+
 func Marshal(v any) ([]byte, error) {
 	if isSlice(v) {
 		return marshalSlice(v)

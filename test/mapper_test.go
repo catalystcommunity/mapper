@@ -169,6 +169,15 @@ func (s *MapperSuite) TestMappedSliceToMappedSlice() {
 	s.assertMappedSliceEquality(mappedSlice1, mappedSlice2)
 }
 
+func (s *MapperSuite) TestConvert() {
+	num := gofakeit.Number(1, 5)
+	nonMappedSlice := getRandomNonMappedStructPointers(num)
+	mappedSlice := []*mappedStruct{}
+	err := pkg.Convert(nonMappedSlice, &mappedSlice)
+	require.NoError(s.T(), err)
+	s.assertnonMappedPointerSliceMappedPointerSliceEquality(nonMappedSlice, mappedSlice)
+}
+
 // misc tests
 func (s *MapperSuite) TestInvalidArguments() {
 	err := pkg.Unmarshal([]byte{}, []string{})
