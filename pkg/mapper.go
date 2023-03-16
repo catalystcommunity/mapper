@@ -20,6 +20,36 @@ type tagInfo struct {
 }
 
 func Marshal(v any) ([]byte, error) {
+	if isSlice(v) {
+		return marshalSlice(v)
+	}
+	if isStruct(v) {
+		return marshalStruct(v)
+	}
+	return nil, errorx.IllegalArgument.New("unsupported type")
+}
+
+func marshalSlice(v any) ([]byte, error) {
+	marshalledString := "["
+	sliceValue := reflect.ValueOf(v)
+	if sliceValue.Kind() == reflect.Ptr {
+		sliceValue = sliceValue.Elem()
+	}
+	for i := 0; i < sliceValue.Len(); i++ {
+		structBytes, err := marshalStruct(sliceValue.Index(i).Interface())
+		if err != nil {
+			return nil, err
+		}
+		marshalledString += string(structBytes)
+		if i+1 < sliceValue.Len() {
+			marshalledString += ","
+		}
+	}
+	marshalledString += "]"
+	return []byte(marshalledString), nil
+}
+
+func marshalStruct(v any) ([]byte, error) {
 	// read tags
 	tagDatas, err := getTagDatas(v)
 	if err != nil {
@@ -55,7 +85,44 @@ func Marshal(v any) ([]byte, error) {
 	return jsonBytes, nil
 }
 
-func Unmarshal(data []byte, v any) error {
+func Unmarshal(data []byte, v interface{}) error {
+	vValue := reflect.ValueOf(v)
+	if vValue.IsNil() || vValue.Kind() != reflect.Ptr {
+		return errorx.IllegalArgument.New("Cannot Unmarshal to nil or non pointer")
+	}
+	if isSlice(v) {
+		return unmarshalSlice(data, v)
+	}
+	if isStruct(v) {
+		return unmarshalStruct(data, v)
+	}
+	return errorx.IllegalArgument.New("unsupported type")
+}
+
+func unmarshalSlice(data []byte, v interface{}) (err error) {
+	sliceObjType := reflect.TypeOf(v).Elem().Elem()
+	gjson.GetBytes(data, "@this").ForEach(func(key, value gjson.Result) bool {
+		var newObj interface{}
+		if sliceObjType.Kind() == reflect.Ptr {
+			newObj = reflect.New(sliceObjType.Elem()).Interface()
+		} else {
+			newObj = reflect.New(sliceObjType).Interface()
+		}
+		err = unmarshalStruct([]byte(value.String()), newObj)
+		if err != nil {
+			return false
+		}
+		if sliceObjType.Kind() == reflect.Struct && reflect.TypeOf(newObj).Kind() == reflect.Ptr {
+			appendToSlice(v, reflect.ValueOf(newObj).Elem().Interface())
+		} else {
+			appendToSlice(v, reflect.ValueOf(newObj).Interface())
+		}
+		return true
+	})
+	return
+}
+
+func unmarshalStruct(data []byte, v any) error {
 	// read tags
 	tagDatas, err := getTagDatas(v)
 	if err != nil {
@@ -82,7 +149,8 @@ func Unmarshal(data []byte, v any) error {
 			}
 		}
 	}
-	return json.Unmarshal(data, v)
+	err = json.Unmarshal(data, v)
+	return err
 }
 
 func getTagDatas(v any) ([]tagInfo, error) {
@@ -165,4 +233,29 @@ func getTagInfo(field reflect.StructField) tagInfo {
 		tagData.JsonFieldName = field.Name
 	}
 	return tagData
+}
+
+func isSlice(v any) bool {
+	_, typ := getValueAndType(v)
+	return typ.Kind() == reflect.Slice
+}
+
+func isStruct(v any) bool {
+	_, typ := getValueAndType(v)
+	return typ.Kind() == reflect.Struct
+}
+func getValueAndType(v any) (value reflect.Value, typ reflect.Type) {
+	typ = reflect.TypeOf(v)
+	value = reflect.ValueOf(v)
+	if typ.Kind() == reflect.Ptr {
+		typ = typ.Elem()
+		value = value.Elem()
+	}
+	return
+}
+
+func appendToSlice(arrPtr, toAppend interface{}) {
+	valuePtr := reflect.ValueOf(arrPtr)
+	value := valuePtr.Elem()
+	value.Set(reflect.Append(value, reflect.ValueOf(toAppend)))
 }
