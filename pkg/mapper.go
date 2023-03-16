@@ -154,6 +154,9 @@ func unmarshalStruct(data []byte, v any) error {
 			if err != nil {
 				return err
 			}
+			if tagData.OmitEmpty && isEmptyValue(value) {
+				continue
+			}
 			changes[tagData.JsonFieldName] = value
 		}
 		// apply updates
@@ -182,7 +185,7 @@ func getTagDatas(v any) ([]tagInfo, error) {
 	for i := 0; i < destType.NumField(); i++ {
 		field := destType.Field(i)
 		tagData := getTagInfo(field)
-		if tagData.MapperFieldPath != "" {
+		if tagData.MapperFieldPath != "" || tagData.OmitEmpty == true {
 			tagDatas = append(tagDatas, tagData)
 		}
 	}

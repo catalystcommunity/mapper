@@ -2,8 +2,10 @@ package test
 
 import (
 	"encoding/json"
+	"fmt"
 	"github.com/brianvoe/gofakeit/v6"
 	"github.com/catalystsquad/mapper/pkg"
+	"github.com/gobuffalo/nulls"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"testing"
@@ -255,12 +257,23 @@ func (s *MapperSuite) TestTypeCoercion() {
 }
 
 func (s *MapperSuite) TestOmitEmpty() {
-	thing := struct {
-		AString string `json:",omitempty" mapper:"omitempty"`
-	}{}
-	bytes, err := pkg.Marshal(thing)
+	type dest struct {
+		Id nulls.UUID `mapper:"omitempty"`
+	}
+	theString := gofakeit.HackerPhrase()
+	source := struct {
+		AString string
+		Id      string `json:",omitempty"`
+	}{
+		AString: theString,
+		Id:      "",
+	}
+	bytes, err := pkg.Marshal(source)
 	require.NoError(s.T(), err)
-	require.Equal(s.T(), `{}`, string(bytes))
+	require.Equal(s.T(), fmt.Sprintf(`{"AString":"%s"}`, theString), string(bytes))
+	theDest := &dest{}
+	err = pkg.Unmarshal(bytes, theDest)
+	require.NoError(s.T(), err)
 }
 
 func getRandomNonMappedStructPointers(num int) []*nonMappedStruct {
