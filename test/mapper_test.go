@@ -132,6 +132,87 @@ func (s *MapperSuite) TestMarshalSliceField() {
 	require.Equal(s.T(), string(bytes), `{"ASlice":["i","like","turtles"]}`)
 }
 
+func (s *MapperSuite) TestPointerField() {
+	type structWithPointerField struct {
+		MaybeAString *string `json:"maybe_a_string"`
+		MaybeAnInt   *int    `json:"maybe_an_int"`
+		ABool        bool    `json:"a_bool"`
+	}
+
+	type mappedStructWithPointerField struct {
+		SomeOtherStringMaybe *string `json:"some_other_string_maybe" mapper:"maybe_a_string"`
+		SomeOtherIntMaybe    *int    `json:"some_other_int_maybe" mapper:"maybe_an_int"`
+		SomeOtherBool        bool    `json:"some_other_bool" mapper:"a_bool"`
+	}
+	sourceString := gofakeit.HackerPhrase()
+	sourceInt := gofakeit.Number(1, 100000)
+	source := structWithPointerField{
+		MaybeAString: &sourceString,
+		MaybeAnInt:   &sourceInt,
+		ABool:        gofakeit.Bool(),
+	}
+	dest := mappedStructWithPointerField{}
+	err := pkg.Convert(source, &dest)
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), source.MaybeAString, dest.SomeOtherStringMaybe)
+	require.Equal(s.T(), source.MaybeAnInt, dest.SomeOtherIntMaybe)
+	require.Equal(s.T(), source.ABool, dest.SomeOtherBool)
+}
+
+func (s *MapperSuite) TestPointerFieldToNonPointerField() {
+	type structWithPointerField struct {
+		MaybeAString *string `json:"maybe_a_string"`
+		MaybeAnInt   *int    `json:"maybe_an_int"`
+		ABool        bool    `json:"a_bool"`
+	}
+
+	type mappedStructWithPointerField struct {
+		SomeOtherStringMaybe string `json:"some_other_string_maybe" mapper:"maybe_a_string"`
+		SomeOtherIntMaybe    int    `json:"some_other_int_maybe" mapper:"maybe_an_int"`
+		SomeOtherBool        bool   `json:"some_other_bool" mapper:"a_bool"`
+	}
+	sourceString := gofakeit.HackerPhrase()
+	sourceInt := gofakeit.Number(1, 100000)
+	source := structWithPointerField{
+		MaybeAString: &sourceString,
+		MaybeAnInt:   &sourceInt,
+		ABool:        gofakeit.Bool(),
+	}
+	dest := mappedStructWithPointerField{}
+	err := pkg.Convert(source, &dest)
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), *source.MaybeAString, dest.SomeOtherStringMaybe)
+	require.Equal(s.T(), *source.MaybeAnInt, dest.SomeOtherIntMaybe)
+	require.Equal(s.T(), source.ABool, dest.SomeOtherBool)
+}
+
+func (s *MapperSuite) TestNonPointerFieldToPointerField() {
+	type structWithPointerField struct {
+		MaybeAString string `json:"maybe_a_string"`
+		MaybeAnInt   int    `json:"maybe_an_int"`
+		ABool        bool   `json:"a_bool"`
+	}
+
+	type mappedStructWithPointerField struct {
+		SomeOtherStringMaybe *string `json:"some_other_string_maybe" mapper:"maybe_a_string"`
+		SomeOtherIntMaybe    *int    `json:"some_other_int_maybe" mapper:"maybe_an_int"`
+		SomeOtherBool        bool    `json:"some_other_bool" mapper:"a_bool"`
+	}
+	sourceString := gofakeit.HackerPhrase()
+	sourceInt := gofakeit.Number(1, 100000)
+	source := structWithPointerField{
+		MaybeAString: sourceString,
+		MaybeAnInt:   sourceInt,
+		ABool:        gofakeit.Bool(),
+	}
+	dest := mappedStructWithPointerField{}
+	err := pkg.Convert(source, &dest)
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), source.MaybeAString, *dest.SomeOtherStringMaybe)
+	require.Equal(s.T(), source.MaybeAnInt, *dest.SomeOtherIntMaybe)
+	require.Equal(s.T(), source.ABool, dest.SomeOtherBool)
+}
+
 // slice tests
 func (s *MapperSuite) TestNonMappedPointerSliceToMappedPointerSlice() {
 	num := gofakeit.Number(1, 5)

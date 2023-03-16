@@ -79,7 +79,7 @@ func marshalStruct(v any) ([]byte, error) {
 	if len(tagDatas) > 0 {
 		for _, tagData := range tagDatas {
 			// get the value from the json marshalled data
-			value, err := getValue(jsonBytes, tagData.JsonFieldName, tagData.AsString, tagData.Field.Type.Kind())
+			value, err := getValue(jsonBytes, tagData.JsonFieldName, tagData.AsString, tagData.Field)
 			if err != nil {
 				return nil, err
 			}
@@ -150,7 +150,7 @@ func unmarshalStruct(data []byte, v any) error {
 		changes := map[string]interface{}{}
 		for _, tagData := range tagDatas {
 			// get the value using the mapped path
-			value, err := getValue(data, tagData.MapperFieldPath, tagData.AsString, tagData.Field.Type.Kind())
+			value, err := getValue(data, tagData.MapperFieldPath, tagData.AsString, tagData.Field)
 			if err != nil {
 				return err
 			}
@@ -192,14 +192,18 @@ func getTagDatas(v any) ([]tagInfo, error) {
 	return tagDatas, nil
 }
 
-func getValue(data []byte, path string, asString bool, typ reflect.Kind) (interface{}, error) {
+func getValue(data []byte, path string, asString bool, field reflect.StructField) (interface{}, error) {
 	result := gjson.GetBytes(data, path)
+	typ := field.Type
+	if typ.Kind() == reflect.Ptr {
+		typ = typ.Elem()
+	}
 	if asString {
 		// the json tag indicates it should be a string value, so the value is the string of the result
 		return result.String(), nil
 	} else {
 		// the json tag does not indicate it should be a string, so type switch to use the correct type
-		switch typ {
+		switch typ.Kind() {
 		case reflect.String:
 			return result.String(), nil
 		case reflect.Bool:
