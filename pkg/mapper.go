@@ -217,6 +217,10 @@ func getValue(data []byte, path string, asString bool, typ reflect.Kind) (interf
 			return float32(result.Float()), nil
 		case reflect.Float64:
 			return result.Float(), nil
+		case reflect.Struct:
+			return result.String(), nil
+		case reflect.Slice:
+			return result.String(), nil
 		default:
 			return nil, errorx.IllegalState.New("unsupported type: %s", typ)
 		}

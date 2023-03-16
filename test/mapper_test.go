@@ -102,6 +102,34 @@ func (s *MapperSuite) TestPointerToNonPointer() {
 	s.assertNonMappedStructEquality(nonMapped1, nonMapped2)
 }
 
+func (s *MapperSuite) TestMarshalStructField() {
+	theStruct := struct {
+		AnotherStruct struct {
+			AString string
+			AnInt   int
+			ABool   bool
+		}
+	}{AnotherStruct: struct {
+		AString string
+		AnInt   int
+		ABool   bool
+	}{AString: "one", AnInt: 2, ABool: false}}
+	bytes, err := pkg.Marshal(theStruct)
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), string(bytes), `{"AnotherStruct":{"AString":"one","AnInt":2,"ABool":false}}`)
+}
+
+func (s *MapperSuite) TestMarshalSliceField() {
+	theStruct := struct {
+		ASlice []string
+	}{
+		ASlice: []string{"i", "like", "turtles"},
+	}
+	bytes, err := pkg.Marshal(theStruct)
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), string(bytes), `{"ASlice":["i","like","turtles"]}`)
+}
+
 // slice tests
 func (s *MapperSuite) TestNonMappedPointerSliceToMappedPointerSlice() {
 	num := gofakeit.Number(1, 5)
