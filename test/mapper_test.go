@@ -220,18 +220,25 @@ func (s *MapperSuite) TestInvalidArguments() {
 }
 
 func (s *MapperSuite) TestTypeCoercion() {
+	type nestedStruct struct {
+		AString string
+		AnInt   int
+	}
+
 	type baseStruct struct {
-		AString  string                 `json:"a_string"`
-		ABool    string                 `json:"bool_string"`
-		AnInt    int                    `json:"an_int"`
-		AnObject map[string]interface{} `json:"an_object"`
+		AString      string                 `json:"a_string"`
+		ABool        string                 `json:"bool_string"`
+		AnInt        int                    `json:"an_int"`
+		AnObject     map[string]interface{} `json:"an_object"`
+		NestedStruct nestedStruct           `json:"nested_struct"`
 	}
 
 	type coercedStruct struct {
-		AnInt          int     `json:"an_int" mapper:"a_string"`
-		ABool          bool    `json:"a_bool" mapper:"bool_string"`
-		AFloat         float64 `json:"a_float" mapper:"an_int"`
-		SomeJsonObject string  `json:"some_bytes" mapper:"an_object"`
+		AnInt            int     `json:"an_int" mapper:"a_string"`
+		ABool            bool    `json:"a_bool" mapper:"bool_string"`
+		AFloat           float64 `json:"a_float" mapper:"an_int"`
+		SomeJsonObject   string  `json:"some_bytes" mapper:"an_object"`
+		SomeNestedStruct string  `json:"some_struct" mapper:"nested_struct"`
 	}
 	aBaseStruct := baseStruct{
 		AString: "10000",
@@ -240,6 +247,10 @@ func (s *MapperSuite) TestTypeCoercion() {
 		AnObject: map[string]interface{}{
 			"one": 1,
 			"two": true,
+		},
+		NestedStruct: nestedStruct{
+			AString: "one",
+			AnInt:   1,
 		},
 	}
 	aCoerecedStruct := coercedStruct{}
@@ -254,6 +265,9 @@ func (s *MapperSuite) TestTypeCoercion() {
 	objBytes, err := json.Marshal(aBaseStruct.AnObject)
 	require.NoError(s.T(), err)
 	require.Equal(s.T(), string(objBytes), aCoerecedStruct.SomeJsonObject)
+	structBytes, err := json.Marshal(aBaseStruct.NestedStruct)
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), string(structBytes), aCoerecedStruct.SomeNestedStruct)
 }
 
 func (s *MapperSuite) TestOmitEmpty() {

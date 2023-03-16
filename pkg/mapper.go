@@ -230,6 +230,8 @@ func getValue(data []byte, path string, asString bool, typ reflect.Kind) (interf
 			return result.Float(), nil
 		case reflect.Struct:
 			return result.String(), nil
+		case reflect.Map:
+			return result.String(), nil
 		case reflect.Slice:
 			return result.String(), nil
 		default:
@@ -257,6 +259,9 @@ func getTagInfo(field reflect.StructField) tagInfo {
 		tagData.JsonFieldName = jsonTagSplit[0]
 	} else {
 		tagData.JsonFieldName = field.Name
+	}
+	if tagData.MapperFieldPath == "" {
+		tagData.MapperFieldPath = tagData.JsonFieldName
 	}
 	return tagData
 }
