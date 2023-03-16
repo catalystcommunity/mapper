@@ -9,14 +9,19 @@ import (
 	"strings"
 )
 
-const mapperTagName = "mapper"
-const jsonTagName = "json"
+const (
+	mapperTagName = "mapper"
+	jsonTagName   = "json"
+	omitEmpty     = "omitempty"
+	asString      = "string"
+)
 
 type tagInfo struct {
 	MapperFieldPath string
 	AsString        bool
 	Field           reflect.StructField
 	JsonFieldName   string
+	OmitEmpty       bool
 }
 
 func Convert(source, dest interface{}) error {
@@ -77,6 +82,9 @@ func marshalStruct(v any) ([]byte, error) {
 			value, err := getValue(jsonBytes, tagData.JsonFieldName, tagData.AsString, tagData.Field.Type.Kind())
 			if err != nil {
 				return nil, err
+			}
+			if tagData.OmitEmpty && isEmptyValue(value) {
+				continue
 			}
 			changes[tagData.MapperFieldPath] = value
 		}
@@ -232,11 +240,14 @@ func getTagInfo(field reflect.StructField) tagInfo {
 		Field: field,
 	}
 	mapperTagSplit := strings.Split(field.Tag.Get(mapperTagName), ",")
-	if len(mapperTagSplit) > 0 {
-		tagData.MapperFieldPath = mapperTagSplit[0]
-	}
-	if len(mapperTagSplit) > 1 && mapperTagSplit[1] == "string" {
-		tagData.AsString = true
+	for _, tagPart := range mapperTagSplit {
+		if tagPart == asString {
+			tagData.AsString = true
+		} else if tagPart == omitEmpty {
+			tagData.OmitEmpty = true
+		} else {
+			tagData.MapperFieldPath = tagPart
+		}
 	}
 	jsonTagSplit := strings.Split(field.Tag.Get(jsonTagName), ",")
 	if len(jsonTagSplit) > 0 {
@@ -270,4 +281,23 @@ func appendToSlice(arrPtr, toAppend interface{}) {
 	valuePtr := reflect.ValueOf(arrPtr)
 	value := valuePtr.Elem()
 	value.Set(reflect.Append(value, reflect.ValueOf(toAppend)))
+}
+
+func isEmptyValue(value interface{}) bool {
+	v := reflect.ValueOf(value)
+	switch v.Kind() {
+	case reflect.Array, reflect.Map, reflect.Slice, reflect.String:
+		return v.Len() == 0
+	case reflect.Bool:
+		return !v.Bool()
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return v.Int() == 0
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+		return v.Uint() == 0
+	case reflect.Float32, reflect.Float64:
+		return v.Float() == 0
+	case reflect.Interface, reflect.Pointer:
+		return v.IsNil()
+	}
+	return false
 }

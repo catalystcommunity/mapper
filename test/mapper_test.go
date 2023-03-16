@@ -231,7 +231,6 @@ func (s *MapperSuite) TestTypeCoercion() {
 		AFloat         float64 `json:"a_float" mapper:"an_int"`
 		SomeJsonObject string  `json:"some_bytes" mapper:"an_object"`
 	}
-
 	aBaseStruct := baseStruct{
 		AString: "10000",
 		ABool:   "true",
@@ -253,6 +252,15 @@ func (s *MapperSuite) TestTypeCoercion() {
 	objBytes, err := json.Marshal(aBaseStruct.AnObject)
 	require.NoError(s.T(), err)
 	require.Equal(s.T(), string(objBytes), aCoerecedStruct.SomeJsonObject)
+}
+
+func (s *MapperSuite) TestOmitEmpty() {
+	thing := struct {
+		AString string `json:",omitempty" mapper:"omitempty"`
+	}{}
+	bytes, err := pkg.Marshal(thing)
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), `{}`, string(bytes))
 }
 
 func getRandomNonMappedStructPointers(num int) []*nonMappedStruct {
