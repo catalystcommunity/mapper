@@ -193,15 +193,18 @@ func getTagDatas(v any) ([]tagInfo, error) {
 
 	// Iterate over all available fields and read the tag values
 	tagDatas := []tagInfo{}
-	for i := 0; i < destType.NumField(); i++ {
-		field := destType.Field(i)
-		if field.Tag.Get(mapperTagName) != "" {
-			tagData := getTagInfo(field)
-			if tagData.MapperFieldPath != "" || tagData.OmitEmpty == true {
-				tagDatas = append(tagDatas, tagData)
+	if destType.Kind() == reflect.Struct {
+		for i := 0; i < destType.NumField(); i++ {
+			field := destType.Field(i)
+			if field.Tag.Get(mapperTagName) != "" {
+				tagData := getTagInfo(field)
+				if tagData.MapperFieldPath != "" || tagData.OmitEmpty == true {
+					tagDatas = append(tagDatas, tagData)
+				}
 			}
 		}
 	}
+
 	return tagDatas, nil
 }
 
