@@ -2,10 +2,13 @@ package test
 
 import (
 	"encoding/json"
+	"fmt"
 	"github.com/brianvoe/gofakeit/v6"
 	"github.com/catalystsquad/mapper/pkg"
+	"github.com/gobuffalo/nulls"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"strconv"
 	"testing"
 )
 
@@ -51,54 +54,306 @@ type mappedStruct struct {
 	SomeOtherFloat64 float64 `json:"some_other_float_64" mapper:"a_float_64"`
 }
 
-func (s *MapperSuite) Test() {
-	// aNonMappedStruct represents an object that is not under our control thus we can't change the fields
-	aNonMappedStruct := getRandomNonMappedStruct()
+// struct tests
+func (s *MapperSuite) TestNonMappedToMapped() {
+	nonMapped := getRandomNonMappedStruct()
+	mapped := mappedStruct{}
+	bytes, err := pkg.Marshal(nonMapped)
+	require.NoError(s.T(), err)
+	err = pkg.Unmarshal(bytes, &mapped)
+	require.NoError(s.T(), err)
+	s.assertNonMappedStructMappedStructEquality(nonMapped, mapped)
+}
 
-	// aMappedStruct represents an object that is under our control, so we have different field names and different json tags but we want
-	// to marshall it to this using the external field/json names
-	var aMappedStruct mappedStruct
+func (s *MapperSuite) TestMappedToNonMapped() {
+	mapped := getRandomMappedStruct()
+	nonMapped := nonMappedStruct{}
+	bytes, err := pkg.Marshal(mapped)
+	require.NoError(s.T(), err)
+	err = pkg.Unmarshal(bytes, &nonMapped)
+	require.NoError(s.T(), err)
+	s.assertNonMappedStructMappedStructEquality(nonMapped, mapped)
+}
 
-	// test marshalling from aNonMappedStruct to aMappedStruct is equal
-	bytes, err := pkg.Marshal(aNonMappedStruct)
+func (s *MapperSuite) TestMappedToMapped() {
+	mapped1 := getRandomMappedStruct()
+	mapped2 := getRandomMappedStruct()
+	bytes, err := pkg.Marshal(mapped1)
 	require.NoError(s.T(), err)
-	err = pkg.Unmarshal(bytes, &aMappedStruct)
+	err = pkg.Unmarshal(bytes, &mapped2)
 	require.NoError(s.T(), err)
-	s.assertNonMappedStructMappedStructEquality(aNonMappedStruct, aMappedStruct)
+	s.assertMappedStructEquality(mapped1, mapped2)
+}
 
-	// test marshalling from aMappedStruct back to aNonMappedStruct is equal
-	bytes, err = nil, nil
-	bytes, err = pkg.Marshal(aMappedStruct)
+func (s *MapperSuite) TestNonMappedToNonMapped() {
+	nonMapped1 := getRandomNonMappedStruct()
+	nonMapped2 := getRandomNonMappedStruct()
+	bytes, err := pkg.Marshal(nonMapped1)
 	require.NoError(s.T(), err)
-	newNonMappedStruct := &nonMappedStruct{}
-	err = pkg.Unmarshal(bytes, newNonMappedStruct)
+	err = pkg.Unmarshal(bytes, &nonMapped2)
 	require.NoError(s.T(), err)
-	s.assertNonMappedStructMappedStructEquality(aNonMappedStruct, aMappedStruct)
+	s.assertNonMappedStructEquality(nonMapped1, nonMapped2)
+}
 
-	// test marshalling from mapped aMappedStruct to mapped aMappedStruct using json works
-	newMappedStruct := mappedStruct{}
-	bytes, err = json.Marshal(aMappedStruct)
+func (s *MapperSuite) TestPointerToNonPointer() {
+	nonMapped1 := getRandomNonMappedStruct()
+	nonMapped2 := getRandomNonMappedStruct()
+	bytes, err := pkg.Marshal(&nonMapped1)
 	require.NoError(s.T(), err)
-	err = json.Unmarshal(bytes, &newMappedStruct)
+	err = pkg.Unmarshal(bytes, &nonMapped2)
 	require.NoError(s.T(), err)
-	s.assertMappedStructEquality(aMappedStruct, newMappedStruct)
+	s.assertNonMappedStructEquality(nonMapped1, nonMapped2)
+}
+
+func (s *MapperSuite) TestMarshalStructField() {
+	theStruct := struct {
+		AnotherStruct struct {
+			AString string
+			AnInt   int
+			ABool   bool
+		}
+	}{AnotherStruct: struct {
+		AString string
+		AnInt   int
+		ABool   bool
+	}{AString: "one", AnInt: 2, ABool: false}}
+	bytes, err := pkg.Marshal(theStruct)
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), string(bytes), `{"AnotherStruct":{"AString":"one","AnInt":2,"ABool":false}}`)
+}
+
+func (s *MapperSuite) TestMarshalSliceField() {
+	theStruct := struct {
+		ASlice []string
+	}{
+		ASlice: []string{"i", "like", "turtles"},
+	}
+	bytes, err := pkg.Marshal(theStruct)
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), string(bytes), `{"ASlice":["i","like","turtles"]}`)
+}
+
+func (s *MapperSuite) TestPointerField() {
+	type structWithPointerField struct {
+		MaybeAString *string `json:"maybe_a_string"`
+		MaybeAnInt   *int    `json:"maybe_an_int"`
+		ABool        bool    `json:"a_bool"`
+	}
+
+	type mappedStructWithPointerField struct {
+		SomeOtherStringMaybe *string `json:"some_other_string_maybe" mapper:"maybe_a_string"`
+		SomeOtherIntMaybe    *int    `json:"some_other_int_maybe" mapper:"maybe_an_int"`
+		SomeOtherBool        bool    `json:"some_other_bool" mapper:"a_bool"`
+	}
+	sourceString := gofakeit.HackerPhrase()
+	sourceInt := gofakeit.Number(1, 100000)
+	source := structWithPointerField{
+		MaybeAString: &sourceString,
+		MaybeAnInt:   &sourceInt,
+		ABool:        gofakeit.Bool(),
+	}
+	dest := mappedStructWithPointerField{}
+	err := pkg.Convert(source, &dest)
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), source.MaybeAString, dest.SomeOtherStringMaybe)
+	require.Equal(s.T(), source.MaybeAnInt, dest.SomeOtherIntMaybe)
+	require.Equal(s.T(), source.ABool, dest.SomeOtherBool)
+}
+
+func (s *MapperSuite) TestPointerFieldToNonPointerField() {
+	type structWithPointerField struct {
+		MaybeAString *string `json:"maybe_a_string"`
+		MaybeAnInt   *int    `json:"maybe_an_int"`
+		ABool        bool    `json:"a_bool"`
+	}
+
+	type mappedStructWithPointerField struct {
+		SomeOtherStringMaybe string `json:"some_other_string_maybe" mapper:"maybe_a_string"`
+		SomeOtherIntMaybe    int    `json:"some_other_int_maybe" mapper:"maybe_an_int"`
+		SomeOtherBool        bool   `json:"some_other_bool" mapper:"a_bool"`
+	}
+	sourceString := gofakeit.HackerPhrase()
+	sourceInt := gofakeit.Number(1, 100000)
+	source := structWithPointerField{
+		MaybeAString: &sourceString,
+		MaybeAnInt:   &sourceInt,
+		ABool:        gofakeit.Bool(),
+	}
+	dest := mappedStructWithPointerField{}
+	err := pkg.Convert(source, &dest)
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), *source.MaybeAString, dest.SomeOtherStringMaybe)
+	require.Equal(s.T(), *source.MaybeAnInt, dest.SomeOtherIntMaybe)
+	require.Equal(s.T(), source.ABool, dest.SomeOtherBool)
+}
+
+func (s *MapperSuite) TestNonPointerFieldToPointerField() {
+	type structWithPointerField struct {
+		MaybeAString string `json:"maybe_a_string"`
+		MaybeAnInt   int    `json:"maybe_an_int"`
+		ABool        bool   `json:"a_bool"`
+	}
+
+	type mappedStructWithPointerField struct {
+		SomeOtherStringMaybe *string `json:"some_other_string_maybe" mapper:"maybe_a_string"`
+		SomeOtherIntMaybe    *int    `json:"some_other_int_maybe" mapper:"maybe_an_int"`
+		SomeOtherBool        bool    `json:"some_other_bool" mapper:"a_bool"`
+	}
+	sourceString := gofakeit.HackerPhrase()
+	sourceInt := gofakeit.Number(1, 100000)
+	source := structWithPointerField{
+		MaybeAString: sourceString,
+		MaybeAnInt:   sourceInt,
+		ABool:        gofakeit.Bool(),
+	}
+	dest := mappedStructWithPointerField{}
+	err := pkg.Convert(source, &dest)
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), source.MaybeAString, *dest.SomeOtherStringMaybe)
+	require.Equal(s.T(), source.MaybeAnInt, *dest.SomeOtherIntMaybe)
+	require.Equal(s.T(), source.ABool, dest.SomeOtherBool)
+}
+
+// slice tests
+func (s *MapperSuite) TestNonMappedPointerSliceToMappedPointerSlice() {
+	num := gofakeit.Number(1, 5)
+	nonMappedSlice := getRandomNonMappedStructPointers(num)
+	mappedSlice := []*mappedStruct{}
+	bytes, err := pkg.Marshal(nonMappedSlice)
+	require.NoError(s.T(), err)
+	err = pkg.Unmarshal(bytes, &mappedSlice)
+	require.NoError(s.T(), err)
+	s.assertnonMappedPointerSliceMappedPointerSliceEquality(nonMappedSlice, mappedSlice)
+}
+
+func (s *MapperSuite) TestNonMappedPointerSliceToMappedSlice() {
+	num := gofakeit.Number(1, 5)
+	nonMappedSlice := getRandomNonMappedStructPointers(num)
+	mappedSlice := []mappedStruct{}
+	bytes, err := pkg.Marshal(nonMappedSlice)
+	require.NoError(s.T(), err)
+	err = pkg.Unmarshal(bytes, &mappedSlice)
+	require.NoError(s.T(), err)
+	s.assertnonMappedPointerSliceMappedSliceEquality(nonMappedSlice, mappedSlice)
+}
+
+func (s *MapperSuite) TestNonMappedSliceToMappedSlice() {
+	num := gofakeit.Number(1, 5)
+	nonMappedSlice := getRandomNonMappedStructs(num)
+	mappedSlice := []mappedStruct{}
+	bytes, err := pkg.Marshal(nonMappedSlice)
+	require.NoError(s.T(), err)
+	err = pkg.Unmarshal(bytes, &mappedSlice)
+	require.NoError(s.T(), err)
+	s.assertnonMappedSliceMappedSliceEquality(nonMappedSlice, mappedSlice)
+}
+
+func (s *MapperSuite) TestNonMappedSliceToMappedPointerSlice() {
+	num := gofakeit.Number(1, 5)
+	nonMappedSlice := getRandomNonMappedStructs(num)
+	mappedSlice := []*mappedStruct{}
+	bytes, err := pkg.Marshal(nonMappedSlice)
+	require.NoError(s.T(), err)
+	err = pkg.Unmarshal(bytes, &mappedSlice)
+	require.NoError(s.T(), err)
+	s.assertnonMappedSliceMappedPointerSliceEquality(nonMappedSlice, mappedSlice)
+}
+
+func (s *MapperSuite) TestNonMappedSliceToNonMappedSlice() {
+	num := gofakeit.Number(1, 5)
+	nonMappedSlice1 := getRandomNonMappedStructs(num)
+	nonMappedSlice2 := []nonMappedStruct{}
+	bytes, err := pkg.Marshal(nonMappedSlice1)
+	require.NoError(s.T(), err)
+	err = pkg.Unmarshal(bytes, &nonMappedSlice2)
+	require.NoError(s.T(), err)
+	s.assertnonMappedSliceNonMappedSliceEquality(nonMappedSlice1, nonMappedSlice2)
+}
+
+func (s *MapperSuite) TestMappedSliceToMappedSlice() {
+	num := gofakeit.Number(1, 5)
+	mappedSlice1 := getRandomMappedStructs(num)
+	mappedSlice2 := []mappedStruct{}
+	bytes, err := pkg.Marshal(mappedSlice1)
+	require.NoError(s.T(), err)
+	err = pkg.Unmarshal(bytes, &mappedSlice2)
+	require.NoError(s.T(), err)
+	s.assertMappedSliceEquality(mappedSlice1, mappedSlice2)
+}
+
+func (s *MapperSuite) TestConvert() {
+	num := gofakeit.Number(1, 5)
+	nonMappedSlice := getRandomNonMappedStructPointers(num)
+	mappedSlice := []*mappedStruct{}
+	err := pkg.Convert(nonMappedSlice, &mappedSlice)
+	require.NoError(s.T(), err)
+	s.assertnonMappedPointerSliceMappedPointerSliceEquality(nonMappedSlice, mappedSlice)
+}
+
+func (s *MapperSuite) TestConvertNestedJson() {
+	type nested struct {
+		Zip_Postal_Code_C string `json:"Zip_Postal_Code__c,omitempty"`
+		Name              string `json:"Name,omitempty"`
+		City_C            string `json:"City__c,omitempty"`
+		Record_Source_C   string `json:"Record_Source__c,omitempty"`
+	}
+
+	type sStruct struct {
+		Property_C *nested `json:"Property__c,omitempty"`
+	}
+
+	type dStruct struct {
+		Property__c json.RawMessage `json:"Property__c" mapper:"Property__c,omitempty"`
+	}
+
+	source := sStruct{Property_C: &nested{
+		Zip_Postal_Code_C: gofakeit.Zip(),
+		Name:              gofakeit.Name(),
+		City_C:            gofakeit.City(),
+		Record_Source_C:   gofakeit.BeerStyle(),
+	}}
+
+	dest := dStruct{}
+	err := pkg.Convert(source, &dest)
+	require.NoError(s.T(), err)
+	source = sStruct{}
+	err = pkg.Convert(dest, &source)
+	require.NoError(s.T(), err)
+
+}
+
+// misc tests
+func (s *MapperSuite) TestInvalidArguments() {
+	err := pkg.Unmarshal([]byte{}, []string{})
+	require.Error(s.T(), err)
+	require.Contains(s.T(), err.Error(), "Cannot Unmarshal to nil or non pointer")
+	var strings *[]string
+	err = pkg.Unmarshal([]byte{}, strings)
+	require.Error(s.T(), err)
+	require.Contains(s.T(), err.Error(), "Cannot Unmarshal to nil or non pointer")
 }
 
 func (s *MapperSuite) TestTypeCoercion() {
+	type nestedStruct struct {
+		AString string
+		AnInt   int
+	}
+
 	type baseStruct struct {
-		AString  string                 `json:"a_string"`
-		ABool    string                 `json:"bool_string"`
-		AnInt    int                    `json:"an_int"`
-		AnObject map[string]interface{} `json:"an_object"`
+		AString      string                 `json:"a_string"`
+		ABool        string                 `json:"bool_string"`
+		AnInt        int                    `json:"an_int"`
+		AnObject     map[string]interface{} `json:"an_object"`
+		NestedStruct nestedStruct           `json:"nested_struct"`
 	}
 
 	type coercedStruct struct {
-		AnInt          int     `json:"an_int" mapper:"a_string"`
-		ABool          bool    `json:"a_bool" mapper:"bool_string"`
-		AFloat         float64 `json:"a_float" mapper:"an_int"`
-		SomeJsonObject string  `json:"some_bytes" mapper:"an_object"`
+		AnInt            int     `json:"an_int" mapper:"a_string,coerce"`
+		ABool            bool    `json:"a_bool" mapper:"bool_string,coerce"`
+		AFloat           float64 `json:"a_float" mapper:"an_int,coerce"`
+		SomeJsonObject   string  `json:"some_bytes" mapper:"an_object,coerce"`
+		SomeNestedStruct string  `json:"some_struct" mapper:"nested_struct,coerce"`
 	}
-
 	aBaseStruct := baseStruct{
 		AString: "10000",
 		ABool:   "true",
@@ -106,6 +361,10 @@ func (s *MapperSuite) TestTypeCoercion() {
 		AnObject: map[string]interface{}{
 			"one": 1,
 			"two": true,
+		},
+		NestedStruct: nestedStruct{
+			AString: "one",
+			AnInt:   1,
 		},
 	}
 	aCoerecedStruct := coercedStruct{}
@@ -120,12 +379,67 @@ func (s *MapperSuite) TestTypeCoercion() {
 	objBytes, err := json.Marshal(aBaseStruct.AnObject)
 	require.NoError(s.T(), err)
 	require.Equal(s.T(), string(objBytes), aCoerecedStruct.SomeJsonObject)
+	structBytes, err := json.Marshal(aBaseStruct.NestedStruct)
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), string(structBytes), aCoerecedStruct.SomeNestedStruct)
+}
+
+func (s *MapperSuite) TestOmitEmptyStruct() {
+	type dest struct {
+		Id nulls.UUID `mapper:"omitempty"`
+	}
+	theString := gofakeit.HackerPhrase()
+	source := struct {
+		AString string
+		Id      string `json:",omitempty"`
+	}{
+		AString: theString,
+		Id:      "",
+	}
+	bytes, err := pkg.Marshal(source)
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), fmt.Sprintf(`{"AString":"%s"}`, theString), string(bytes))
+	theDest := &dest{}
+	err = pkg.Unmarshal(bytes, theDest)
+	require.NoError(s.T(), err)
+}
+
+func (s *MapperSuite) TestOmitEmptySlice() {
+	type source struct {
+		Id *string `json:"id,omitempty"`
+	}
+	type dest struct {
+		Id nulls.UUID `json:"id,omitempty" mapper:"omitempty"`
+	}
+	theSource := source{
+		Id: nil,
+	}
+	theDest := dest{}
+	err := pkg.Convert(theSource, &theDest)
+	require.NoError(s.T(), err)
+}
+
+func getRandomNonMappedStructPointers(num int) []*nonMappedStruct {
+	structs := []*nonMappedStruct{}
+	for i := 0; i < num; i++ {
+		theStruct := getRandomNonMappedStruct()
+		structs = append(structs, &theStruct)
+	}
+	return structs
+}
+
+func getRandomNonMappedStructs(num int) []nonMappedStruct {
+	structs := []nonMappedStruct{}
+	for i := 0; i < num; i++ {
+		structs = append(structs, getRandomNonMappedStruct())
+	}
+	return structs
 }
 
 func getRandomNonMappedStruct() nonMappedStruct {
 	return nonMappedStruct{
 		ABool:    gofakeit.Bool(),
-		AString:  gofakeit.HackerPhrase(),
+		AString:  strconv.Itoa(gofakeit.Number(10000, 100000000)),
 		AnInt8:   gofakeit.Int8(),
 		AnInt16:  gofakeit.Int16(),
 		AnInt32:  gofakeit.Int32(),
@@ -139,44 +453,70 @@ func getRandomNonMappedStruct() nonMappedStruct {
 	}
 }
 
-func getRandomMappedStruct() nonMappedStruct {
-	return nonMappedStruct{
-		ABool:    gofakeit.Bool(),
-		AString:  gofakeit.HackerPhrase(),
-		AnInt8:   gofakeit.Int8(),
-		AnInt16:  gofakeit.Int16(),
-		AnInt32:  gofakeit.Int32(),
-		AnInt64:  gofakeit.Int64(),
-		AUint8:   gofakeit.Uint8(),
-		AUint16:  gofakeit.Uint16(),
-		AUint32:  gofakeit.Uint32(),
-		AUint64:  gofakeit.Uint64(),
-		AFloat32: gofakeit.Float32(),
-		AFloat64: gofakeit.Float64(),
+func getRandomMappedStructs(num int) []mappedStruct {
+	structs := []mappedStruct{}
+	for i := 0; i < num; i++ {
+		structs = append(structs, getRandomMappedStruct())
+	}
+	return structs
+}
+
+func getRandomMappedStruct() mappedStruct {
+	return mappedStruct{
+		SomeOtherBool:    gofakeit.Bool(),
+		SomeOtherString:  gofakeit.HackerPhrase(),
+		SomeOtherInt8:    gofakeit.Int8(),
+		SomeOtherInt16:   gofakeit.Int16(),
+		SomeOtherInt32:   gofakeit.Int32(),
+		SomeOtherInt64:   gofakeit.Int64(),
+		SomeOtherUint8:   gofakeit.Uint8(),
+		SomeOtherUint16:  gofakeit.Uint16(),
+		SomeOtherUint32:  gofakeit.Uint32(),
+		SomeOtherUint64:  gofakeit.Uint64(),
+		SomeOtherFloat32: gofakeit.Float32(),
+		SomeOtherFloat64: gofakeit.Float64(),
 	}
 }
 
-func BenchmarkMapperMarshal(b *testing.B) {
-	mapped := getRandomMappedStruct()
-
-	for n := 0; n < b.N; n++ {
-		pkg.Marshal(mapped)
+func (s *MapperSuite) assertnonMappedSliceMappedSliceEquality(nonMappedSlice []nonMappedStruct, mappedSlice []mappedStruct) {
+	require.Equal(s.T(), len(nonMappedSlice), len(mappedSlice))
+	for i, nonMapped := range nonMappedSlice {
+		s.assertNonMappedStructMappedStructEquality(nonMapped, mappedSlice[i])
 	}
 }
 
-func BenchmarkMapperUnmarshal(b *testing.B) {
-	var mapped mappedStruct
-	nonMapped := getRandomNonMappedStruct()
-	bytes, err := pkg.Marshal(nonMapped)
-	if err != nil {
-		panic(err)
+func (s *MapperSuite) assertnonMappedPointerSliceMappedPointerSliceEquality(nonMappedSlice []*nonMappedStruct, mappedSlice []*mappedStruct) {
+	require.Equal(s.T(), len(nonMappedSlice), len(mappedSlice))
+	for i, nonMapped := range nonMappedSlice {
+		s.assertNonMappedStructMappedStructEquality(*nonMapped, *mappedSlice[i])
 	}
+}
 
-	for n := 0; n < b.N; n++ {
-		err = pkg.Unmarshal(bytes, &mapped)
-		if err != nil {
-			panic(err)
-		}
+func (s *MapperSuite) assertnonMappedPointerSliceMappedSliceEquality(nonMappedSlice []*nonMappedStruct, mappedSlice []mappedStruct) {
+	require.Equal(s.T(), len(nonMappedSlice), len(mappedSlice))
+	for i, nonMapped := range nonMappedSlice {
+		s.assertNonMappedStructMappedStructEquality(*nonMapped, mappedSlice[i])
+	}
+}
+
+func (s *MapperSuite) assertnonMappedSliceMappedPointerSliceEquality(nonMappedSlice []nonMappedStruct, mappedSlice []*mappedStruct) {
+	require.Equal(s.T(), len(nonMappedSlice), len(mappedSlice))
+	for i, nonMapped := range nonMappedSlice {
+		s.assertNonMappedStructMappedStructEquality(nonMapped, *mappedSlice[i])
+	}
+}
+
+func (s *MapperSuite) assertnonMappedSliceNonMappedSliceEquality(nonMappedSlice1, nonMappedSlice2 []nonMappedStruct) {
+	require.Equal(s.T(), len(nonMappedSlice1), len(nonMappedSlice2))
+	for i, nonMapped := range nonMappedSlice1 {
+		s.assertNonMappedStructEquality(nonMapped, nonMappedSlice2[i])
+	}
+}
+
+func (s *MapperSuite) assertMappedSliceEquality(mappedSlice1, mappedSlice2 []mappedStruct) {
+	require.Equal(s.T(), len(mappedSlice1), len(mappedSlice2))
+	for i, mapped := range mappedSlice1 {
+		s.assertMappedStructEquality(mapped, mappedSlice2[i])
 	}
 }
 
@@ -208,4 +548,59 @@ func (s *MapperSuite) assertMappedStructEquality(expected, actual mappedStruct) 
 	require.Equal(s.T(), expected.SomeOtherUint64, actual.SomeOtherUint64)
 	require.Equal(s.T(), expected.SomeOtherFloat32, actual.SomeOtherFloat32)
 	require.Equal(s.T(), expected.SomeOtherFloat64, actual.SomeOtherFloat64)
+}
+
+func (s *MapperSuite) assertNonMappedStructEquality(expected, actual nonMappedStruct) {
+	require.Equal(s.T(), expected.ABool, actual.ABool)
+	require.Equal(s.T(), expected.AString, actual.AString)
+	require.Equal(s.T(), expected.AnInt8, actual.AnInt8)
+	require.Equal(s.T(), expected.AnInt16, actual.AnInt16)
+	require.Equal(s.T(), expected.AnInt32, actual.AnInt32)
+	require.Equal(s.T(), expected.AnInt64, actual.AnInt64)
+	require.Equal(s.T(), expected.AUint8, actual.AUint8)
+	require.Equal(s.T(), expected.AUint16, actual.AUint16)
+	require.Equal(s.T(), expected.AUint32, actual.AUint32)
+	require.Equal(s.T(), expected.AUint64, actual.AUint64)
+	require.Equal(s.T(), expected.AFloat32, actual.AFloat32)
+	require.Equal(s.T(), expected.AFloat64, actual.AFloat64)
+}
+
+func BenchmarkMapperMarshal(b *testing.B) {
+	mapped := getRandomMappedStruct()
+
+	for n := 0; n < b.N; n++ {
+		pkg.Marshal(mapped)
+	}
+}
+
+func BenchmarkMapperUnmarshal(b *testing.B) {
+	var mapped mappedStruct
+	nonMapped := getRandomNonMappedStruct()
+	bytes, err := pkg.Marshal(nonMapped)
+	if err != nil {
+		panic(err)
+	}
+
+	for n := 0; n < b.N; n++ {
+		err = pkg.Unmarshal(bytes, &mapped)
+		if err != nil {
+			panic(err)
+		}
+	}
+}
+
+func BenchmarkMarshalUnmarshal(b *testing.B) {
+	var mapped mappedStruct
+	nonMapped := getRandomNonMappedStruct()
+
+	for n := 0; n < b.N; n++ {
+		bytes, err := pkg.Marshal(nonMapped)
+		if err != nil {
+			panic(err)
+		}
+		err = pkg.Unmarshal(bytes, &mapped)
+		if err != nil {
+			panic(err)
+		}
+	}
 }
