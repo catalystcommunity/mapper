@@ -14,6 +14,7 @@ const (
 	jsonTagName   = "json"
 	omitEmpty     = "omitempty"
 	asString      = "string"
+	coerce        = "coerce"
 )
 
 type tagInfo struct {
@@ -22,6 +23,12 @@ type tagInfo struct {
 	Field           reflect.StructField
 	JsonFieldName   string
 	OmitEmpty       bool
+	Coerce          bool
+}
+
+type change struct {
+	Path  string
+	Value []byte
 }
 
 func Convert(source, dest interface{}) error {
@@ -74,12 +81,12 @@ func marshalStruct(v any) ([]byte, error) {
 		return nil, err
 	}
 
-	changes := map[string]interface{}{}
+	changes := []change{}
 	// process any fields that have the mapper tag, track updates in case there is collision on tags
 	if len(tagDatas) > 0 {
 		for _, tagData := range tagDatas {
 			// get the value from the json marshalled data
-			value, err := getValue(jsonBytes, tagData.JsonFieldName, tagData.AsString, tagData.Field)
+			value, err := getValue(jsonBytes, tagData.JsonFieldName, tagData.Coerce, tagData.AsString, tagData.Field)
 			if err != nil {
 				return nil, err
 			}
@@ -90,12 +97,12 @@ func marshalStruct(v any) ([]byte, error) {
 				}
 				continue
 			}
-			changes[tagData.MapperFieldPath] = value
+			changes = append(changes, change{Path: tagData.MapperFieldPath, Value: []byte(value)})
 		}
 		// apply updates
-		for path, value := range changes {
+		for _, change := range changes {
 			// set the value at the mapped path
-			jsonBytes, err = sjson.SetBytes(jsonBytes, path, value)
+			jsonBytes, err = sjson.SetRawBytes(jsonBytes, change.Path, change.Value)
 			if err != nil {
 				return nil, err
 			}
@@ -151,22 +158,22 @@ func unmarshalStruct(data []byte, v any) error {
 
 	// process any fields that have the mapper tag, track updates in case there is collision on tags
 	if len(tagDatas) > 0 {
-		changes := map[string]interface{}{}
+		changes := []change{}
 		for _, tagData := range tagDatas {
 			// get the value using the mapped path
-			value, err := getValue(data, tagData.MapperFieldPath, tagData.AsString, tagData.Field)
+			value, err := getValue(data, tagData.MapperFieldPath, tagData.Coerce, tagData.AsString, tagData.Field)
 			if err != nil {
 				return err
 			}
 			if tagData.OmitEmpty && isEmptyValue(value) {
 				continue
 			}
-			changes[tagData.JsonFieldName] = value
+			changes = append(changes, change{Path: tagData.JsonFieldName, Value: []byte(value)})
 		}
 		// apply updates
-		for path, value := range changes {
+		for _, change := range changes {
 			// set the value to the field's json path
-			data, err = sjson.SetBytes(data, path, value)
+			data, err = sjson.SetRawBytes(data, change.Path, change.Value)
 			if err != nil {
 				return err
 			}
@@ -198,56 +205,70 @@ func getTagDatas(v any) ([]tagInfo, error) {
 	return tagDatas, nil
 }
 
-func getValue(data []byte, path string, asString bool, field reflect.StructField) (interface{}, error) {
+func getValue(data []byte, path string, coerce, asString bool, field reflect.StructField) (string, error) {
+	var value string
+	var err error
 	result := gjson.GetBytes(data, path)
+	if coerce {
+		value, err = getCoercedValue(result, field)
+	} else if asString {
+		value = result.String()
+	} else {
+		value = result.Raw
+	}
+	return value, err
+}
+
+func getCoercedValue(result gjson.Result, field reflect.StructField) (string, error) {
+	var rawValue interface{}
+	var err error
 	typ := field.Type
 	if typ.Kind() == reflect.Ptr {
 		typ = typ.Elem()
 	}
-	if asString {
-		// the json tag indicates it should be a string value, so the value is the string of the result
-		return result.String(), nil
-	} else {
-		// the json tag does not indicate it should be a string, so type switch to use the correct type
-		switch typ.Kind() {
-		case reflect.String:
-			return result.String(), nil
-		case reflect.Bool:
-			return result.Bool(), nil
-		case reflect.Int:
-			return int(result.Int()), nil
-		case reflect.Int8:
-			return int8(result.Int()), nil
-		case reflect.Int16:
-			return int16(result.Int()), nil
-		case reflect.Int32:
-			return int32(result.Int()), nil
-		case reflect.Int64:
-			return result.Int(), nil
-		case reflect.Uint:
-			return uint(result.Uint()), nil
-		case reflect.Uint8:
-			return uint8(result.Uint()), nil
-		case reflect.Uint16:
-			return uint16(result.Uint()), nil
-		case reflect.Uint32:
-			return uint32(result.Uint()), nil
-		case reflect.Uint64:
-			return result.Uint(), nil
-		case reflect.Float32:
-			return float32(result.Float()), nil
-		case reflect.Float64:
-			return result.Float(), nil
-		case reflect.Struct:
-			return result.String(), nil
-		case reflect.Map:
-			return result.String(), nil
-		case reflect.Slice:
-			return result.String(), nil
-		default:
-			return nil, errorx.IllegalState.New("unsupported type: %s", typ)
-		}
+	switch typ.Kind() {
+	case reflect.String:
+		rawValue = result.String()
+	case reflect.Bool:
+		rawValue = result.Bool()
+	case reflect.Int:
+		rawValue = int(result.Int())
+	case reflect.Int8:
+		rawValue = int8(result.Int())
+	case reflect.Int16:
+		rawValue = int16(result.Int())
+	case reflect.Int32:
+		rawValue = int32(result.Int())
+	case reflect.Int64:
+		rawValue = result.Int()
+	case reflect.Uint:
+		rawValue = uint(result.Uint())
+	case reflect.Uint8:
+		rawValue = uint8(result.Uint())
+	case reflect.Uint16:
+		rawValue = uint16(result.Uint())
+	case reflect.Uint32:
+		rawValue = uint32(result.Uint())
+	case reflect.Uint64:
+		rawValue = result.Uint()
+	case reflect.Float32:
+		rawValue = float32(result.Float())
+	case reflect.Float64:
+		rawValue = result.Float()
+	case reflect.Struct:
+		rawValue = result.Raw
+	case reflect.Map:
+		rawValue = result.Raw
+	case reflect.Slice:
+		rawValue = result.Raw
+	default:
+		err = errorx.IllegalState.New("unsupported type: %s", typ)
 	}
+	if err != nil {
+		return "", err
+	}
+	jsonBytes, err := json.Marshal(rawValue)
+	return string(jsonBytes), err
 }
 
 func getTagInfo(field reflect.StructField) tagInfo {
@@ -260,6 +281,8 @@ func getTagInfo(field reflect.StructField) tagInfo {
 			tagData.AsString = true
 		} else if tagPart == omitEmpty {
 			tagData.OmitEmpty = true
+		} else if tagPart == coerce {
+			tagData.Coerce = true
 		} else {
 			tagData.MapperFieldPath = tagPart
 		}

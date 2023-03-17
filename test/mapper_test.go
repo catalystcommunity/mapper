@@ -8,6 +8,7 @@ import (
 	"github.com/gobuffalo/nulls"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"strconv"
 	"testing"
 )
 
@@ -289,6 +290,38 @@ func (s *MapperSuite) TestConvert() {
 	s.assertnonMappedPointerSliceMappedPointerSliceEquality(nonMappedSlice, mappedSlice)
 }
 
+func (s *MapperSuite) TestConvertNestedJson() {
+	type nested struct {
+		Zip_Postal_Code_C string `json:"Zip_Postal_Code__c,omitempty"`
+		Name              string `json:"Name,omitempty"`
+		City_C            string `json:"City__c,omitempty"`
+		Record_Source_C   string `json:"Record_Source__c,omitempty"`
+	}
+
+	type sStruct struct {
+		Property_C *nested `json:"Property__c,omitempty"`
+	}
+
+	type dStruct struct {
+		Property__c json.RawMessage `json:"Property__c" mapper:"Property__c,omitempty"`
+	}
+
+	source := sStruct{Property_C: &nested{
+		Zip_Postal_Code_C: gofakeit.Zip(),
+		Name:              gofakeit.Name(),
+		City_C:            gofakeit.City(),
+		Record_Source_C:   gofakeit.BeerStyle(),
+	}}
+
+	dest := dStruct{}
+	err := pkg.Convert(source, &dest)
+	require.NoError(s.T(), err)
+	source = sStruct{}
+	err = pkg.Convert(dest, &source)
+	require.NoError(s.T(), err)
+
+}
+
 // misc tests
 func (s *MapperSuite) TestInvalidArguments() {
 	err := pkg.Unmarshal([]byte{}, []string{})
@@ -315,11 +348,11 @@ func (s *MapperSuite) TestTypeCoercion() {
 	}
 
 	type coercedStruct struct {
-		AnInt            int     `json:"an_int" mapper:"a_string"`
-		ABool            bool    `json:"a_bool" mapper:"bool_string"`
-		AFloat           float64 `json:"a_float" mapper:"an_int"`
-		SomeJsonObject   string  `json:"some_bytes" mapper:"an_object"`
-		SomeNestedStruct string  `json:"some_struct" mapper:"nested_struct"`
+		AnInt            int     `json:"an_int" mapper:"a_string,coerce"`
+		ABool            bool    `json:"a_bool" mapper:"bool_string,coerce"`
+		AFloat           float64 `json:"a_float" mapper:"an_int,coerce"`
+		SomeJsonObject   string  `json:"some_bytes" mapper:"an_object,coerce"`
+		SomeNestedStruct string  `json:"some_struct" mapper:"nested_struct,coerce"`
 	}
 	aBaseStruct := baseStruct{
 		AString: "10000",
@@ -406,7 +439,7 @@ func getRandomNonMappedStructs(num int) []nonMappedStruct {
 func getRandomNonMappedStruct() nonMappedStruct {
 	return nonMappedStruct{
 		ABool:    gofakeit.Bool(),
-		AString:  gofakeit.HackerPhrase(),
+		AString:  strconv.Itoa(gofakeit.Number(10000, 100000000)),
 		AnInt8:   gofakeit.Int8(),
 		AnInt16:  gofakeit.Int16(),
 		AnInt32:  gofakeit.Int32(),
