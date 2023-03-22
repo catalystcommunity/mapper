@@ -2,10 +2,13 @@ package pkg
 
 import (
 	"encoding/json"
+	"fmt"
+	tyyp "github.com/gurukami/typ/v2"
 	"github.com/joomcode/errorx"
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
 	"reflect"
+	"strconv"
 	"strings"
 )
 
@@ -23,12 +26,12 @@ type tagInfo struct {
 	Field           reflect.StructField
 	JsonFieldName   string
 	OmitEmpty       bool
-	Coerce          bool
 }
 
 type change struct {
 	Path  string
-	Value []byte
+	Value interface{}
+	Raw   bool
 }
 
 func Convert(source, dest interface{}) error {
@@ -86,7 +89,7 @@ func marshalStruct(v any) ([]byte, error) {
 	if len(tagDatas) > 0 {
 		for _, tagData := range tagDatas {
 			// get the value from the json marshalled data
-			value, err := getValue(jsonBytes, tagData.JsonFieldName, tagData.Coerce, tagData.AsString, tagData.Field)
+			value, err := getValue(jsonBytes, tagData.JsonFieldName, tagData.AsString, tagData.Field)
 			if err != nil {
 				return nil, err
 			}
@@ -97,14 +100,22 @@ func marshalStruct(v any) ([]byte, error) {
 				}
 				continue
 			}
-			changes = append(changes, change{Path: tagData.MapperFieldPath, Value: []byte(value)})
+			_, isBytes := value.([]byte)
+			changes = append(changes, change{Path: tagData.MapperFieldPath, Value: value, Raw: isBytes})
 		}
 		// apply updates
 		for _, change := range changes {
 			// set the value at the mapped path
-			jsonBytes, err = sjson.SetRawBytes(jsonBytes, change.Path, change.Value)
-			if err != nil {
-				return nil, err
+			if change.Raw {
+				jsonBytes, err = sjson.SetRawBytes(jsonBytes, change.Path, change.Value.([]byte))
+				if err != nil {
+					return nil, err
+				}
+			} else {
+				jsonBytes, err = sjson.SetBytes(jsonBytes, change.Path, change.Value)
+				if err != nil {
+					return nil, err
+				}
 			}
 		}
 	}
@@ -161,21 +172,29 @@ func unmarshalStruct(data []byte, v any) error {
 		changes := []change{}
 		for _, tagData := range tagDatas {
 			// get the value using the mapped path
-			value, err := getValue(data, tagData.MapperFieldPath, tagData.Coerce, tagData.AsString, tagData.Field)
+			value, err := getValue(data, tagData.MapperFieldPath, tagData.AsString, tagData.Field)
 			if err != nil {
 				return err
 			}
 			if tagData.OmitEmpty && isEmptyValue(value) {
 				continue
 			}
-			changes = append(changes, change{Path: tagData.JsonFieldName, Value: []byte(value)})
+			_, isBytes := value.([]byte)
+			changes = append(changes, change{Path: tagData.JsonFieldName, Value: value, Raw: isBytes})
 		}
 		// apply updates
 		for _, change := range changes {
-			// set the value to the field's json path
-			data, err = sjson.SetRawBytes(data, change.Path, change.Value)
-			if err != nil {
-				return err
+			// set the value at the mapped path
+			if change.Raw {
+				data, err = sjson.SetRawBytes(data, change.Path, change.Value.([]byte))
+				if err != nil {
+					return err
+				}
+			} else {
+				data, err = sjson.SetBytes(data, change.Path, change.Value)
+				if err != nil {
+					return err
+				}
 			}
 		}
 	}
@@ -208,70 +227,79 @@ func getTagDatas(v any) ([]tagInfo, error) {
 	return tagDatas, nil
 }
 
-func getValue(data []byte, path string, coerce, asString bool, field reflect.StructField) (string, error) {
-	var value string
+func getValue(data []byte, path string, asString bool, field reflect.StructField) (interface{}, error) {
+	var value interface{}
 	var err error
 	result := gjson.GetBytes(data, path)
-	if coerce {
-		value, err = getCoercedValue(result, field)
-	} else if asString {
-		value = result.String()
-	} else {
-		value = result.Raw
+	value = result.Raw
+	value, err = getCoercedValue(result, field)
+	if asString {
+		value = fmt.Sprintf("%v", value)
 	}
 	return value, err
 }
 
-func getCoercedValue(result gjson.Result, field reflect.StructField) (string, error) {
-	var rawValue interface{}
-	var err error
+func getCoercedValue(result gjson.Result, field reflect.StructField) (interface{}, error) {
 	typ := field.Type
 	if typ.Kind() == reflect.Ptr {
 		typ = typ.Elem()
 	}
+	stringValue := result.String()
+	hasDecimal := strings.Contains(result.String(), ".")
 	switch typ.Kind() {
 	case reflect.String:
-		rawValue = result.String()
+		return stringValue, nil
 	case reflect.Bool:
-		rawValue = result.Bool()
+		return strconv.ParseBool(stringValue)
 	case reflect.Int:
-		rawValue = int(result.Int())
+		float := tyyp.Of(stringValue).Float().V()
+		return int(float), nil
 	case reflect.Int8:
-		rawValue = int8(result.Int())
+		float := tyyp.Of(stringValue).Float().V()
+		return int8(float), nil
 	case reflect.Int16:
-		rawValue = int16(result.Int())
+		float := tyyp.Of(stringValue).Float().V()
+		return int16(float), nil
 	case reflect.Int32:
-		rawValue = int32(result.Int())
+		float := tyyp.Of(stringValue).Float().V()
+		return int32(float), nil
 	case reflect.Int64:
-		rawValue = result.Int()
+		if hasDecimal {
+			float := tyyp.Of(stringValue).Float().V()
+			return tyyp.Of(float).Int64().V(), nil
+		}
+		return tyyp.Of(stringValue).Int64().V(), nil
 	case reflect.Uint:
-		rawValue = uint(result.Uint())
+		float := tyyp.Of(stringValue).Float().V()
+		return uint(float), nil
 	case reflect.Uint8:
-		rawValue = uint8(result.Uint())
+		float := tyyp.Of(stringValue).Float().V()
+		return uint8(float), nil
 	case reflect.Uint16:
-		rawValue = uint16(result.Uint())
+		float := tyyp.Of(stringValue).Float().V()
+		return uint16(float), nil
 	case reflect.Uint32:
-		rawValue = uint32(result.Uint())
+		float := tyyp.Of(stringValue).Float().V()
+		return uint32(float), nil
 	case reflect.Uint64:
-		rawValue = result.Uint()
+		if hasDecimal {
+			float := tyyp.Of(stringValue).Float().V()
+			return tyyp.Of(float).Int64().V(), nil
+		}
+		return tyyp.Of(stringValue).Uint64().V(), nil
 	case reflect.Float32:
-		rawValue = float32(result.Float())
+		return tyyp.Of(stringValue).Float32().V(), nil
 	case reflect.Float64:
-		rawValue = result.Float()
+		return tyyp.Of(stringValue).Float().V(), nil
 	case reflect.Struct:
-		rawValue = result.Raw
+		return []byte(result.Raw), nil
 	case reflect.Map:
-		rawValue = result.Raw
+		return []byte(result.Raw), nil
 	case reflect.Slice:
-		rawValue = result.Raw
+		return []byte(result.Raw), nil
 	default:
-		err = errorx.IllegalState.New("unsupported type: %s", typ)
+		return nil, errorx.IllegalState.New("cannot coerce %s into %s", result.Raw, typ)
 	}
-	if err != nil {
-		return "", err
-	}
-	jsonBytes, err := json.Marshal(rawValue)
-	return string(jsonBytes), err
 }
 
 func getTagInfo(field reflect.StructField) tagInfo {
@@ -284,8 +312,6 @@ func getTagInfo(field reflect.StructField) tagInfo {
 			tagData.AsString = true
 		} else if tagPart == omitEmpty {
 			tagData.OmitEmpty = true
-		} else if tagPart == coerce {
-			tagData.Coerce = true
 		} else {
 			tagData.MapperFieldPath = tagPart
 		}

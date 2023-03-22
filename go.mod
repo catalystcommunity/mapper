@@ -5,6 +5,7 @@ go 1.20
 require (
 	github.com/brianvoe/gofakeit/v6 v6.20.2
 	github.com/gobuffalo/nulls v0.4.2
+	github.com/gurukami/typ/v2 v2.2.1
 	github.com/joomcode/errorx v1.1.0
 	github.com/stretchr/testify v1.8.2
 	github.com/tidwall/gjson v1.14.4

@@ -34,9 +34,9 @@ type externalStructIDontControl struct {
 }
 
 type internalStructIDoControl struct {
-	SpecificInt int16 `json:"specific_int" mapper:"a_thing,coerce"`
-	StringyThingy bool `json:"stringy_thingy" mapper:"another_thing,coerce"`
-	AJsonBlob string `json:"a_json_blob" mapper:"big_ole_nasty_thing,coerce"`
+	SpecificInt int16 `json:"specific_int" mapper:"a_thing"`
+	StringyThingy bool `json:"stringy_thingy" mapper:"another_thing"`
+	AJsonBlob string `json:"a_json_blob" mapper:"big_ole_nasty_thing"`
 }
 ```
 # Features
@@ -45,7 +45,7 @@ You can use json tags as normal and there will be no conflicts.
 ## Mapping Fields From External Structs / Data
 When interfacing with data from applications outside of your control it can be difficult and brittle to keep your own objects in sync. Such as when some incoming data is deeply nested but you only need a few fields from it. marshaling from the incoming data into your own structs would require some code or intermediate structs to extract it and transform it into the shape you want. With mapper you can accomplish this with a struct tag.
 ## Type Coercion
-Mapper can handle type coercion for you by converting the data at the given path to the field type that the struct tag is on. Add `coerce` to the struct tag to enable type coercion for that field.
+Mapper handles type coercion for you by converting the data at the given path to the field type that the struct tag is on. This is done automatically as a best effort to map the data to the struct.
 ## JSON Path Support
 Mapper supports json path syntax so you can map a struct field to a nested field on another struct.
 ## Limitations

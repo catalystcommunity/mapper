@@ -348,11 +348,11 @@ func (s *MapperSuite) TestTypeCoercion() {
 	}
 
 	type coercedStruct struct {
-		AnInt            int     `json:"an_int" mapper:"a_string,coerce"`
-		ABool            bool    `json:"a_bool" mapper:"bool_string,coerce"`
-		AFloat           float64 `json:"a_float" mapper:"an_int,coerce"`
-		SomeJsonObject   string  `json:"some_bytes" mapper:"an_object,coerce"`
-		SomeNestedStruct string  `json:"some_struct" mapper:"nested_struct,coerce"`
+		AnInt            int     `json:"an_int" mapper:"a_string"`
+		ABool            bool    `json:"a_bool" mapper:"bool_string"`
+		AFloat           float64 `json:"a_float" mapper:"an_int"`
+		SomeJsonObject   string  `json:"some_bytes" mapper:"an_object"`
+		SomeNestedStruct string  `json:"some_struct" mapper:"nested_struct"`
 	}
 	aBaseStruct := baseStruct{
 		AString: "10000",
@@ -419,6 +419,31 @@ func (s *MapperSuite) TestOmitEmptySlice() {
 	require.NoError(s.T(), err)
 }
 
+func (s *MapperSuite) TestConvertFloat() {
+	type source struct {
+		AFloat float64 `json:"a_float,string"`
+		AnInt  int64   `json:"an_int,string"`
+	}
+	type dest struct {
+		IntFromFloat int64   `json:"int_from_float,string" mapper:"a_float,string"`
+		FloatFromInt float64 `json:"float_from_int,string" mapper:"an_int,string"`
+	}
+	theSource := source{
+		AFloat: gofakeit.Float64Range(1.00, 10000.00),
+		AnInt:  int64(gofakeit.Number(1, 1000000)),
+	}
+	theDest := dest{}
+	err := pkg.Convert(theSource, &theDest)
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), int64(theSource.AFloat), theDest.IntFromFloat)
+	require.Equal(s.T(), float64(theSource.AnInt), theDest.FloatFromInt)
+	returnSource := source{}
+	err = pkg.Convert(theDest, &returnSource)
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), float64(theDest.IntFromFloat), returnSource.AFloat)
+	require.Equal(s.T(), int64(theDest.FloatFromInt), returnSource.AnInt)
+}
+
 func getRandomNonMappedStructPointers(num int) []*nonMappedStruct {
 	structs := []*nonMappedStruct{}
 	for i := 0; i < num; i++ {
@@ -440,10 +465,12 @@ func getRandomNonMappedStruct() nonMappedStruct {
 	return nonMappedStruct{
 		ABool:    gofakeit.Bool(),
 		AString:  strconv.Itoa(gofakeit.Number(10000, 100000000)),
+		AnInt:    gofakeit.IntRange(1, 100000),
 		AnInt8:   gofakeit.Int8(),
 		AnInt16:  gofakeit.Int16(),
 		AnInt32:  gofakeit.Int32(),
 		AnInt64:  gofakeit.Int64(),
+		AUint:    gofakeit.UintRange(1, 1000000),
 		AUint8:   gofakeit.Uint8(),
 		AUint16:  gofakeit.Uint16(),
 		AUint32:  gofakeit.Uint32(),
@@ -521,18 +548,18 @@ func (s *MapperSuite) assertMappedSliceEquality(mappedSlice1, mappedSlice2 []map
 }
 
 func (s *MapperSuite) assertNonMappedStructMappedStructEquality(aNonMappedStruct nonMappedStruct, aMappedStruct mappedStruct) {
-	require.Equal(s.T(), aMappedStruct.SomeOtherBool, aNonMappedStruct.ABool)
-	require.Equal(s.T(), aMappedStruct.SomeOtherString, aNonMappedStruct.AString)
-	require.Equal(s.T(), aMappedStruct.SomeOtherInt8, aNonMappedStruct.AnInt8)
-	require.Equal(s.T(), aMappedStruct.SomeOtherInt16, aNonMappedStruct.AnInt16)
-	require.Equal(s.T(), aMappedStruct.SomeOtherInt32, aNonMappedStruct.AnInt32)
-	require.Equal(s.T(), aMappedStruct.SomeOtherInt64, aNonMappedStruct.AnInt64)
-	require.Equal(s.T(), aMappedStruct.SomeOtherUint8, aNonMappedStruct.AUint8)
-	require.Equal(s.T(), aMappedStruct.SomeOtherUint16, aNonMappedStruct.AUint16)
-	require.Equal(s.T(), aMappedStruct.SomeOtherUint32, aNonMappedStruct.AUint32)
-	require.Equal(s.T(), aMappedStruct.SomeOtherUint64, aNonMappedStruct.AUint64)
-	require.Equal(s.T(), aMappedStruct.SomeOtherFloat32, aNonMappedStruct.AFloat32)
-	require.Equal(s.T(), aMappedStruct.SomeOtherFloat64, aNonMappedStruct.AFloat64)
+	require.Equal(s.T(), aNonMappedStruct.ABool, aMappedStruct.SomeOtherBool)
+	require.Equal(s.T(), aNonMappedStruct.AString, aMappedStruct.SomeOtherString)
+	require.Equal(s.T(), aNonMappedStruct.AnInt8, aMappedStruct.SomeOtherInt8)
+	require.Equal(s.T(), aNonMappedStruct.AnInt16, aMappedStruct.SomeOtherInt16)
+	require.Equal(s.T(), aNonMappedStruct.AnInt32, aMappedStruct.SomeOtherInt32)
+	require.Equal(s.T(), aNonMappedStruct.AnInt64, aMappedStruct.SomeOtherInt64)
+	require.Equal(s.T(), aNonMappedStruct.AUint8, aMappedStruct.SomeOtherUint8)
+	require.Equal(s.T(), aNonMappedStruct.AUint16, aMappedStruct.SomeOtherUint16)
+	require.Equal(s.T(), aNonMappedStruct.AUint32, aMappedStruct.SomeOtherUint32)
+	require.Equal(s.T(), aNonMappedStruct.AUint64, aMappedStruct.SomeOtherUint64)
+	require.Equal(s.T(), aNonMappedStruct.AFloat32, aMappedStruct.SomeOtherFloat32, aNonMappedStruct.AFloat32)
+	require.Equal(s.T(), aNonMappedStruct.AFloat64, aMappedStruct.SomeOtherFloat64)
 }
 
 func (s *MapperSuite) assertMappedStructEquality(expected, actual mappedStruct) {
