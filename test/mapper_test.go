@@ -6,6 +6,7 @@ import (
 	"github.com/brianvoe/gofakeit/v6"
 	"github.com/catalystsquad/mapper/pkg"
 	"github.com/gobuffalo/nulls"
+	"github.com/gofrs/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"strconv"
@@ -458,6 +459,21 @@ func (s *MapperSuite) TestEmptyBool() {
 	err := pkg.Convert(theSource, &theDest)
 	require.NoError(s.T(), err)
 	require.False(s.T(), theDest.ABool)
+}
+
+func (s *MapperSuite) TestCoerceFailure() {
+	type source struct {
+		AString string `json:"a_string"`
+	}
+	type dest struct {
+		AUuid uuid.UUID `json:"a_uuid,omitempty" mapper:"a_string,omitempty"`
+	}
+	theSource := source{
+		AString: "",
+	}
+	theDest := dest{}
+	err := pkg.Convert(theSource, &theDest)
+	require.NoError(s.T(), err)
 }
 
 func getRandomNonMappedStructPointers(num int) []*nonMappedStruct {

@@ -301,7 +301,8 @@ func getCoercedValue(result gjson.Result, field reflect.StructField) (interface{
 	case reflect.Slice:
 		return []byte(result.Raw), nil
 	default:
-		return nil, errorx.IllegalState.New("cannot coerce %s into %s", result.Raw, typ)
+		// return the string value by default
+		return stringValue, nil
 	}
 }
 
