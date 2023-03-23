@@ -250,6 +250,9 @@ func getCoercedValue(result gjson.Result, field reflect.StructField) (interface{
 	case reflect.String:
 		return stringValue, nil
 	case reflect.Bool:
+		if stringValue == "" {
+			return false, nil
+		}
 		return strconv.ParseBool(stringValue)
 	case reflect.Int:
 		float := tyyp.Of(stringValue).Float().V()

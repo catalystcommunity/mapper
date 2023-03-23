@@ -444,6 +444,22 @@ func (s *MapperSuite) TestConvertFloat() {
 	require.Equal(s.T(), int64(theDest.FloatFromInt), returnSource.AnInt)
 }
 
+func (s *MapperSuite) TestEmptyBool() {
+	type source struct {
+		AString string `json:"a_string"`
+	}
+	type dest struct {
+		ABool bool `json:"a_bool" mapper:"a_string"`
+	}
+	theSource := source{
+		AString: "",
+	}
+	theDest := dest{}
+	err := pkg.Convert(theSource, &theDest)
+	require.NoError(s.T(), err)
+	require.False(s.T(), theDest.ABool)
+}
+
 func getRandomNonMappedStructPointers(num int) []*nonMappedStruct {
 	structs := []*nonMappedStruct{}
 	for i := 0; i < num; i++ {
