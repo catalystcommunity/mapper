@@ -59,7 +59,7 @@ Marshaling
 ```text
 goos: linux
 goarch: amd64
-pkg: github.com/catalystsquad/mapper/test
+pkg: github.com/catalystcommunity/mapper/test
 cpu: AMD Ryzen 9 5950X 16-Core Processor            
 BenchmarkMapperMarshal
 BenchmarkMapperMarshal-32    	  399133	      5142 ns/op
@@ -68,7 +68,7 @@ Unmarshaling
 ```text
 goos: linux
 goarch: amd64
-pkg: github.com/catalystsquad/mapper/test
+pkg: github.com/catalystcommunity/mapper/test
 cpu: AMD Ryzen 9 5950X 16-Core Processor            
 BenchmarkMapperUnmarshal
 BenchmarkMapperUnmarshal-32    	   20544	     65755 ns/op

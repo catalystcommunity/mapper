@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/brianvoe/gofakeit/v6"
-	"github.com/catalystsquad/mapper/pkg"
+	"github.com/catalystcommunity/mapper/pkg"
 	"github.com/gobuffalo/nulls"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"

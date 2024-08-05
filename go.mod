@@ -1,4 +1,4 @@
-module github.com/catalystsquad/mapper
+module github.com/catalystcommunity/mapper
 
 go 1.20
 

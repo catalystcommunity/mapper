@@ -11,6 +11,6 @@ jobs:
     runs-on: ubuntu-latest
     name: Release
     steps:
-      - uses: catalystsquad/action-semantic-release-general@v1
+      - uses: catalystcommunity/action-semantic-release-general@v1
         with:
           token: ${{ secrets.AUTOMATION_PAT }}
